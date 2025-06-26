@@ -1,42 +1,126 @@
-import json
-from core import LibraryCore
+import sqlite3
+from core import LibraryCore, Book, Author, Genre
 
 
-class FileStorage:
+class SQLiteStorage:
+
+    
+    def __init__(self, db_name: str = "library.db"):
+        self.db_name = db_name
+        self._init_db()  # Создаем таблицы при инициализации
 
 
-    def __init__(self, filename: str = "library_data.json"):
-        self.filename = filename
+    def _init_db(self):
+        """Создает таблицы, если их нет."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+
+            # Таблица авторов
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS authors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL
+                )
+            """)
+
+            # Таблица жанров
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS genres (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL
+                )
+            """)
+
+            # Таблица книг (связь с авторами и жанрами)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS books (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    author_id INTEGER NOT NULL,
+                    genre_id INTEGER NOT NULL,
+                    is_read BOOLEAN DEFAULT FALSE,
+                    FOREIGN KEY (author_id) REFERENCES authors(id),
+                    FOREIGN KEY (genre_id) REFERENCES genres(id)
+                )
+            """)
+            conn.commit()
 
     def save(self, core: LibraryCore):
-        data = {
-            "authors": list(core.authors.keys()),
-            "genres": list(core.genres.keys()),
-            "books": [{
-                "title": book.title,
-                "author": book.author.name,
-                "genre": book.genre.name,
-                "is_read": book.is_read
-            } for book in core.books]
-        }
-        with open(self.filename, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        """Сохраняет данные в SQLite."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+
+            # Очищаем старые данные (опционально, можно и без этого)
+            cursor.execute("DELETE FROM books")
+            cursor.execute("DELETE FROM genres")
+            cursor.execute("DELETE FROM authors")
+
+            # Сохраняем авторов
+            for author in core.authors.values():
+                cursor.execute(
+                    "INSERT INTO authors (name) VALUES (?)",
+                    (author.name,)
+                )
+
+            # Сохраняем жанры
+            for genre in core.genres.values():
+                cursor.execute(
+                    "INSERT INTO genres (name) VALUES (?)",
+                    (genre.name,)
+                )
+
+            # Сохраняем книги
+            for book in core.books:
+                # Получаем ID автора и жанра
+                cursor.execute(
+                    "SELECT id FROM authors WHERE name = ?",
+                    (book.author.name,)
+                )
+                author_id = cursor.fetchone()[0]
+                
+                cursor.execute(
+                    "SELECT id FROM genres WHERE name = ?",
+                    (book.genre.name,)
+                )
+                genre_id = cursor.fetchone()[0]
+                
+                cursor.execute(
+                    """INSERT INTO books 
+                    (title, author_id, genre_id, is_read) 
+                    VALUES (?, ?, ?, ?)""",
+                    (book.title, author_id, genre_id, book.is_read)
+                )
             
+            conn.commit()
+
     def load(self, core: LibraryCore):
-        try:
-            with open(self.filename, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            # Загрузка авторов и жанров
-            for author_name in data.get("authors", []):
-                core.add_author(author_name)
-            for genre_name in data.get("genres", []):
-                core.add_genre(genre_name)
-            # Загрузка книг
+        """Загружает данные из SQLite."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+
+            # Загружаем авторов
+            cursor.execute("SELECT name FROM authors")
+            authors = cursor.fetchall()
+            for (name,) in authors:
+                core.add_author(name)
+
+            # Загружаем жанры
+            cursor.execute("SELECT name FROM genres")
+            genres = cursor.fetchall()
+            for (name,) in genres:
+                core.add_genre(name)
+
+            # Загружаем книги
+            cursor.execute("""
+                SELECT b.title, a.name, g.name, b.is_read
+                FROM books b
+                JOIN authors a ON b.author_id = a.id
+                JOIN genres g ON b.genre_id = g.id
+            """)
+            books_data = cursor.fetchall()
+
             core.books.clear()
-            for book_data in data.get("books", []):
-                book = core.add_book(book_data["title"], book_data["author"], book_data["genre"])
-                if book_data.get("is_read"):
+            for title, author_name, genre_name, is_read in books_data:
+                book = core.add_book(title, author_name, genre_name)
+                if is_read:
                     book.mark_as_read()
-        except FileNotFoundError:
-            # Файл отсутствует – загрузка пропускается
-            pass

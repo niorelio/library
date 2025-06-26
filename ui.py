@@ -1,19 +1,23 @@
 from core import LibraryCore
-from infrastructure import FileStorage
+from infrastructure import SQLiteStorage
+
 
 class LibraryUI:
-    def __init__(self, core: LibraryCore, storage: FileStorage):
+
+    
+    def __init__(self, core: LibraryCore, storage: SQLiteStorage):
         self.core = core
         self.storage = storage
         self.storage.load(self.core)
 
     def show_main_menu(self):
+        """Главное меню программы"""
         print("""
  ████─█──█─████───██─█──█─████─███─███─█──█─████
  █────█──█─█─────█─█─█──█─█──█──█──█───█─█──█──█
  ████─█─██─████─█──█─█─██─█──█──█──███─██───████
  █──█─██─█─█──█─█──█─██─█─█──█──█──█───█─█──█──█
- ████─█──█─████─█──█─█──█─████──█──███─█──█─█──█                             
+ ████─█──█─████─█──█─█──█─████──█──███─█──█─█──█
         """)
         print("""
         1. Книги
@@ -24,175 +28,124 @@ class LibraryUI:
         0. Выход
         """)
 
-    def input_choice(self) -> str:
-        return input("Выберите действие: ").strip()
+    def input_choice(self, prompt: str = "Выберите действие: ") -> str:
+        """Универсальный ввод выбора пользователя"""
+        return input(prompt).strip()
 
     def run(self):
+        """Основной цикл программы"""
         while True:
             self.show_main_menu()
             choice = self.input_choice()
-            if choice == "1":
-                self.show_books_menu()
-            elif choice == "2":
-                self.show_authors_menu()
-            elif choice == "3":
-                self.show_genres_menu()
-            elif choice == "4":
-                self.search_books()
-            elif choice == "5":
-                self.show_recommendations()
-            elif choice == "0":
-                self.storage.save(self.core)
-                print("Выход из программы. Данные сохранены.")
-                break
-            else:
-                print("Неверный выбор. Попробуйте еще раз.")
+
+            match choice:
+                case "1": self.show_books_menu()
+                case "2": self.show_authors_menu()
+                case "3": self.show_genres_menu()
+                case "4": self.universal_search()
+                case "5": self.show_recommendations()
+                case "0": 
+                    self.storage.save(self.core)
+                    print("Выход из программы. Данные сохранены.")
+                    break
+                case _: print("Неверный выбор. Попробуйте еще раз.")
 
     def show_books_menu(self):
+        """Меню работы с книгами"""
         while True:
-            print("""
-            === Меню Книг ===
-            1. Добавить книгу
-            2. Показать все книги
-            3. Отметить книгу как прочитанную
-            0. Назад
-            """)
-            choice = self.input_choice()
-            if choice == "1":
-                self.add_book()
-            elif choice == "2":
-                self.show_all_books()
-            elif choice == "3":
-                self.mark_book_read()
-            elif choice == "0":
-                break
-            else:
-                print("Неверный выбор. Попробуйте еще раз.")
+            print("\n=== Меню Книг ===")
+            print("1. Добавить книгу")
+            print("2. Показать все книги")
+            print("3. Отметить книгу как прочитанную")
+            print("0. Назад")
+            
+            match self.input_choice():
+                case "1": self.add_book()
+                case "2": self.show_all_books()
+                case "3": self.mark_book_read()
+                case "0": break
+                case _: print("Неверный выбор. Попробуйте еще раз.")
 
     def show_authors_menu(self):
+        """Меню работы с авторами"""
         while True:
-            print("""
-            === Меню Авторов ===
-            1. Добавить автора
-            2. Показать всех авторов
-            0. Назад
-            """)
-            choice = self.input_choice()
-            if choice == "1":
-                self.add_author()
-            elif choice == "2":
-                self.show_all_authors()
-            elif choice == "0":
-                break
-            else:
-                print("Неверный выбор. Попробуйте еще раз.")
+            print("\n=== Меню Авторов ===")
+            print("1. Добавить автора")
+            print("2. Показать всех авторов")
+            print("0. Назад")
+            
+            match self.input_choice():
+                case "1": self.add_author()
+                case "2": self.show_all_authors()
+                case "0": break
+                case _: print("Неверный выбор. Попробуйте еще раз.")
 
     def show_genres_menu(self):
+        """Меню работы с жанрами"""
         while True:
-            print("""
-            === Меню Жанров ===
-            1. Добавить жанр
-            2. Показать все жанры
-            0. Назад
-            """)
-            choice = self.input_choice()
-            if choice == "1":
-                self.add_genre()
-            elif choice == "2":
-                self.show_all_genres()
-            elif choice == "0":
-                break
-            else:
-                print("Неверный выбор. Попробуйте еще раз.")
+            print("\n=== Меню Жанров ===")
+            print("1. Добавить жанр")
+            print("2. Показать все жанры")
+            print("0. Назад")
+            
+            match self.input_choice():
+                case "1": self.add_genre()
+                case "2": self.show_all_genres()
+                case "0": break
+                case _: print("Неверный выбор. Попробуйте еще раз.")
 
     def add_book(self):
+        """Добавление новой книги"""
+        print("\nДобавление новой книги:")
         title = input("Название книги: ").strip()
         author = input("Автор книги: ").strip()
         genre = input("Жанр книги: ").strip()
-        if title and author and genre:
-            book = self.core.add_book(title, author, genre)
-            print(f"Книга '{book.title}' добавлена.")
-        else:
-            print("Все поля должны быть заполнены.")
+
+        if not all([title, author, genre]):
+            print("Все поля должны быть заполнены!")
+            return
+
+        book = self.core.add_book(title, author, genre)
+        print(f"\nКнига '{book.title}' успешно добавлена!")
 
     def show_all_books(self):
+        """Отображение всех книг"""
         books = self.core.get_all_books()
         if not books:
-            print("Книг нет.")
+            print("\nВ библиотеке пока нет книг.")
             return
-        books_sorted = sorted(books, key=lambda b: b.title.lower())
-        print("Список книг:")
-        for book in books_sorted:
-            print(book)
 
-    def search_books(self):
-        print("Поиск книг. Оставьте поле пустым, чтобы пропустить фильтр.")
-        title = input("Название: ").strip()
-        author = input("Автор: ").strip()
-        genre = input("Жанр: ").strip()
-        results = self.core.find_books(
-            title=title if title else None,
-            author_name=author if author else None,
-            genre_name=genre if genre else None
-        )
-        if not results:
-            print("Книги не найдены.")
+        print("\nСписок всех книг:")
+        for i, book in enumerate(sorted(books, key=lambda b: b.title.lower()), 1):
+            print(f"{i}. {book}")
+
+    def universal_search(self):
+        """Универсальный поиск по всем полям"""
+        print("\nУниверсальный поиск")
+        print("Введите часть названия, автора или жанра:")
+        search_term = self.input_choice("Поиск: ")
+        
+        if not search_term:
+            print("Поисковый запрос не может быть пустым!")
             return
-        results_sorted = sorted(results, key=lambda b: b.title.lower())
-        print("Результаты поиска:")
-        for book in results_sorted:
-            print(book)
+
+        results = self.core.universal_search(search_term)
+        if not results:
+            print(f"\nПо запросу '{search_term}' ничего не найдено.")
+            return
+
+        print(f"\nНайдено {len(results)} книг:")
+        for i, book in enumerate(sorted(results, key=lambda b: b.title.lower()), 1):
+            print(f"{i}. {book}")
 
     def mark_book_read(self):
-        title = input("Введите название прочитанной книги: ").strip()
-        success = self.core.mark_book_as_read(title)
-        if success:
-            print(f"Книга '{title}' отмечена как прочитанная.")
-        else:
-            print("Книга не найдена.")
-
-    def add_author(self):
-        name = input("Имя автора: ").strip()
-        if name:
-            author = self.core.add_author(name)
-            print(f"Автор '{author.name}' добавлен.")
-        else:
-            print("Имя автора не может быть пустым.")
-
-    def show_all_authors(self):
-        authors = self.core.get_all_authors()
-        if not authors:
-            print("Авторов нет.")
+        """Пометить книгу как прочитанную"""
+        title = self.input_choice("Введите название прочитанной книги: ")
+        if not title:
+            print("Название не может быть пустым!")
             return
-        authors_sorted = sorted(authors, key=lambda a: a.name.lower())
-        print("Список авторов:")
-        for author in authors_sorted:
-            print(author.name)
 
-    def add_genre(self):
-        name = input("Название жанра: ").strip()
-        if name:
-            genre = self.core.add_genre(name)
-            print(f"Жанр '{genre.name}' добавлен.")
+        if self.core.mark_book_as_read(title):
+            print(f"Книга '{title}' отмечена как прочитанная!")
         else:
-            print("Название жанра не может быть пустым.")
-
-    def show_all_genres(self):
-        genres = self.core.get_all_genres()
-        if not genres:
-            print("Жанров нет.")
-            return
-        genres_sorted = sorted(genres, key=lambda g: g.name.lower())
-        print("Список жанров:")
-        for genre in genres_sorted:
-            print(genre.name)
-
-    def show_recommendations(self):
-        recommendations = self.core.get_recommendations()
-        if not recommendations:
-            print("Нет рекомендаций. Почитайте что-нибудь сначала.")
-            return
-        recommendations_sorted = sorted(recommendations, key=lambda b: b.title.lower())
-        print("Рекомендации на основе прочитанных книг:")
-        for book in recommendations_sorted:
-            print(book)
+            print("Книга не найдена!")
