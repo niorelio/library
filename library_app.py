@@ -2,13 +2,14 @@ from core_realization import BookService, AuthorService, GenreService, Recommend
 from infrastructure import DBConnectMethods, SQLiteAuthorRepository, SQLiteGenreRepository, SQLiteBookRepository
 from ui import LibraryUI
 
+
 def main():
     DB_PATH = "library.db"
     db_conn = DBConnectMethods(DB_PATH)
     
     author_repo = SQLiteAuthorRepository(db_conn)
     genre_repo = SQLiteGenreRepository(db_conn)
-    book_repo = SQLiteBookRepository(db_conn, author_repo, genre_repo)
+    book_repo = SQLiteBookRepository(db_conn)  # Убраны зависимости
     
     book_service = BookService(book_repo, author_repo, genre_repo)
     author_service = AuthorService(author_repo)

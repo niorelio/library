@@ -1,6 +1,9 @@
 from core_interfaces import Author, Book, Genre, IAuthorRepository, IBookRepository, IGenreRepository
 
+
 class BookService:
+
+
     def __init__(self, book_repo: IBookRepository, author_repo: IAuthorRepository, genre_repo: IGenreRepository):
         self.book_repo = book_repo
         self.author_repo = author_repo
@@ -40,7 +43,10 @@ class BookService:
     def mark_book_as_read(self, book_id):
         return self.book_repo.mark_as_read(book_id)
 
+
 class AuthorService:
+
+
     def __init__(self, author_repo: IAuthorRepository):
         self.author_repo = author_repo
 
@@ -51,7 +57,10 @@ class AuthorService:
     def get_all_authors(self):
         return self.author_repo.get_all_authors()
 
+
 class GenreService:
+
+
     def __init__(self, genre_repo: IGenreRepository):
         self.genre_repo = genre_repo
 
@@ -62,7 +71,10 @@ class GenreService:
     def get_all_genres(self):
         return self.genre_repo.get_all_genres()
 
+
 class RecommendationService:
+
+    
     def __init__(self, book_repo: IBookRepository):
         self.book_repo = book_repo
 

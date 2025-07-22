@@ -25,6 +25,7 @@ class Book:
     is_read: bool = False
     id: int | None = None 
 
+
     def mark_as_read(self) -> None:
         self.is_read = True
 
@@ -39,6 +40,8 @@ class Book:
 
 
 class IBookRepository(ABC):
+
+
     @abstractmethod
     def add_book(self, book: Book) -> int:
         pass
@@ -73,6 +76,8 @@ class IBookRepository(ABC):
 
 
 class IAuthorRepository(ABC):
+
+
     @abstractmethod
     def add_author(self, author: Author) -> int:
         pass
@@ -91,6 +96,7 @@ class IAuthorRepository(ABC):
 
 
 class IGenreRepository(ABC):
+
     @abstractmethod
     def add_genre(self, genre: Genre) -> int:
         pass

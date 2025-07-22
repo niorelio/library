@@ -1,7 +1,10 @@
 import sqlite3
 from core_interfaces import Book, Author, Genre, IBookRepository, IAuthorRepository, IGenreRepository
 
+
 class DBConnectMethods:
+
+
     def __init__(self, db: str):
         self.db = db
         self.connection = sqlite3.connect(self.db)
@@ -38,24 +41,24 @@ class DBConnectMethods:
         self.connection.close()
 
 class SQLiteBookRepository(IBookRepository):
-    def __init__(self, db_conn: DBConnectMethods, author_repo: IAuthorRepository, genre_repo: IGenreRepository):
+
+
+    def __init__(self, db_conn: DBConnectMethods):  # Убраны зависимости
         self.db = db_conn
-        self.author_repo = author_repo
-        self.genre_repo = genre_repo
         self._create_tables()
     
     def _create_tables(self):
         self.db.execute_query('''
-            CREATE TABLE IF NOT EXISTS books (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                author_id INTEGER NOT NULL,
-                genre_id INTEGER NOT NULL,
-                is_read BOOLEAN NOT NULL DEFAULT 0,
-                FOREIGN KEY (author_id) REFERENCES authors(id),
-                FOREIGN KEY (genre_id) REFERENCES genres(id)
-            )
-        ''')
+                              CREATE TABLE IF NOT EXISTS books (
+                              id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              title TEXT NOT NULL,
+                              author_id INTEGER NOT NULL,
+                              genre_id INTEGER NOT NULL,
+                              is_read BOOLEAN NOT NULL DEFAULT 0,
+                              FOREIGN KEY (author_id) REFERENCES authors(id),
+                              FOREIGN KEY (genre_id) REFERENCES genres(id)
+                              )
+                              ''')
     
     def add_book(self, book: Book) -> int:
         self.db.execute_query(
@@ -65,61 +68,48 @@ class SQLiteBookRepository(IBookRepository):
         return self.db.get_lastrowid()
     
     def get_all_books(self) -> list[Book]:
-        rows = self.db.execute_get_data(
-            "SELECT id, title, author_id, genre_id, is_read FROM books"
-        )
-        books = []
-        for row in rows:
-            author = self.author_repo.get_author_by_id(row['author_id'])
-            genre = self.genre_repo.get_genre_by_id(row['genre_id'])
-            if author and genre:
-                books.append(Book(
-                    id=row['id'],
-                    title=row['title'],
-                    author=author,
-                    genre=genre,
-                    is_read=bool(row['is_read'])
-                ))
-        return books
+        query = """
+        SELECT 
+        b.id, b.title, b.is_read,
+        a.id AS author_id, a.name AS author_name,
+        g.id AS genre_id, g.name AS genre_name
+        FROM books b
+        LEFT JOIN authors a ON b.author_id = a.id
+        LEFT JOIN genres g ON b.genre_id = g.id
+        """
+        rows = self.db.execute_get_data(query)
+        return self._map_rows_to_books(rows)
     
     def get_book_by_id(self, book_id: int) -> Book | None:
-        rows = self.db.execute_get_data(
-            "SELECT id, title, author_id, genre_id, is_read FROM books WHERE id = ?",
-            book_id
-        )
+        query = """
+        SELECT 
+        b.id, b.title, b.is_read,
+        a.id AS author_id, a.name AS author_name,
+        g.id AS genre_id, g.name AS genre_name
+        FROM books b
+        LEFT JOIN authors a ON b.author_id = a.id
+        LEFT JOIN genres g ON b.genre_id = g.id
+        WHERE b.id = ?
+        """
+        rows = self.db.execute_get_data(query, book_id)
         if rows:
-            book_data = rows[0]
-            author = self.author_repo.get_author_by_id(book_data['author_id'])
-            genre = self.genre_repo.get_genre_by_id(book_data['genre_id'])
-            if author and genre:
-                return Book(
-                    id=book_data['id'],
-                    title=book_data['title'],
-                    author=author,
-                    genre=genre,
-                    is_read=bool(book_data['is_read'])
-                )
+            return self._map_row_to_book(rows[0])
         return None
     
     def get_unread_books(self, limit: int = 5) -> list[Book]:
-        rows = self.db.execute_get_data(
-            "SELECT id, title, author_id, genre_id, is_read "
-            "FROM books WHERE is_read = 0 ORDER BY id DESC LIMIT ?",
-            limit
-        )
-        books = []
-        for row in rows:
-            author = self.author_repo.get_author_by_id(row['author_id'])
-            genre = self.genre_repo.get_genre_by_id(row['genre_id'])
-            if author and genre:
-                books.append(Book(
-                    id=row['id'],
-                    title=row['title'],
-                    author=author,
-                    genre=genre,
-                    is_read=bool(row['is_read'])
-                ))
-        return books
+        query = """
+        SELECT 
+        b.id, b.title, b.is_read,
+        a.id AS author_id, a.name AS author_name,
+        g.id AS genre_id, g.name AS genre_name
+        FROM books b
+        LEFT JOIN genres g ON b.genre_id = g.id
+        WHERE b.is_read = 0 
+        ORDER BY b.id DESC 
+        LIMIT ?
+        """
+        rows = self.db.execute_get_data(query, limit)
+        return self._map_rows_to_books(rows)
     
     def mark_as_read(self, book_id: int) -> bool:
         rowcount = self.db.execute_update(
@@ -129,79 +119,79 @@ class SQLiteBookRepository(IBookRepository):
         return rowcount > 0
     
     def universal_search(self, term: str, limit: int = 20) -> list[Book]:
-        term_lower = term.lower()
-        pattern = f'%{term_lower}%'
-    
-        rows = self.db.execute_get_data('''
-            SELECT b.id, b.title, b.author_id, b.genre_id, b.is_read
-            FROM books b
-            JOIN authors a ON b.author_id = a.id
-            JOIN genres g ON b.genre_id = g.id
-            WHERE LOWER(b.title) LIKE ? 
-               OR LOWER(a.name) LIKE ? 
-               OR LOWER(g.name) LIKE ?
-            ORDER BY 
-                CASE 
-                    WHEN LOWER(b.title) LIKE ? THEN 1 
-                    WHEN LOWER(a.name) LIKE ? THEN 2 
-                    ELSE 3 
-                END
-            LIMIT ?
-        ''', 
-        pattern, pattern, pattern,
-        pattern, pattern, limit)
-    
-        books = []
-        for row in rows:
-            author = self.author_repo.get_author_by_id(row['author_id'])
-            genre = self.genre_repo.get_genre_by_id(row['genre_id'])
-            if author and genre:
-                books.append(Book(
-                    id=row['id'],
-                    title=row['title'],
-                    author=author,
-                    genre=genre,
-                    is_read=bool(row['is_read'])
-                ))
-        return books
+        pattern = f'%{term.lower()}%'
+        query = """
+        SELECT 
+        b.id, b.title, b.is_read,
+        a.id AS author_id, a.name AS author_name,
+        g.id AS genre_id, g.name AS genre_name
+        FROM books b
+        LEFT JOIN authors a ON b.author_id = a.id
+        LEFT JOIN genres g ON b.genre_id = g.id
+        WHERE LOWER(b.title) LIKE ?
+        OR LOWER(a.name) LIKE ? 
+        OR LOWER(g.name) LIKE ?
+        ORDER BY 
+        CASE 
+        WHEN LOWER(b.title) LIKE ? THEN 1 
+        WHEN LOWER(a.name) LIKE ? THEN 2 
+        ELSE 3 
+        END
+        LIMIT ?
+        """
+        rows = self.db.execute_get_data(
+            query, 
+            pattern, pattern, pattern,
+            pattern, pattern, limit
+        )
+        return self._map_rows_to_books(rows)
     
     def get_read_books(self) -> list[Book]:
-        rows = self.db.execute_get_data(
-            "SELECT id, title, author_id, genre_id, is_read FROM books WHERE is_read = 1"
-        )
-        books = []
-        for row in rows:
-            author = self.author_repo.get_author_by_id(row['author_id'])
-            genre = self.genre_repo.get_genre_by_id(row['genre_id'])
-            if author and genre:
-                books.append(Book(
-                    id=row['id'],
-                    title=row['title'],
-                    author=author,
-                    genre=genre,
-                    is_read=bool(row['is_read'])
-                ))
-        return books
+        query = """
+            SELECT 
+                b.id, b.title, b.is_read,
+                a.id AS author_id, a.name AS author_name,
+                g.id AS genre_id, g.name AS genre_name
+            FROM books b
+            LEFT JOIN authors a ON b.author_id = a.id
+            LEFT JOIN genres g ON b.genre_id = g.id
+            WHERE b.is_read = 1
+           """
+        rows = self.db.execute_get_data(query)
+        return self._map_rows_to_books(rows)
 
     def get_unread_books_by_author(self, author_id: int, limit: int = 5) -> list[Book]:
-        rows = self.db.execute_get_data(
-            "SELECT id, title, author_id, genre_id, is_read FROM books "
-            "WHERE author_id = ? AND is_read = 0 ORDER BY id DESC LIMIT ?",
-            author_id, limit
-        )
+        query = """
+            SELECT 
+                b.id, b.title, b.is_read,
+                a.id AS author_id, a.name AS author_name,
+                g.id AS genre_id, g.name AS genre_name
+            FROM books b
+            LEFT JOIN authors a ON b.author_id = a.id
+            LEFT JOIN genres g ON b.genre_id = g.id
+            WHERE b.author_id = ? AND b.is_read = 0 
+            ORDER BY b.id DESC 
+            LIMIT ?
+            """
+        rows = self.db.execute_get_data(query, author_id, limit)
+        return self._map_rows_to_books(rows)
+    
+    def _map_rows_to_books(self, rows) -> list[Book]:
         books = []
         for row in rows:
-            author = self.author_repo.get_author_by_id(row['author_id'])
-            genre = self.genre_repo.get_genre_by_id(row['genre_id'])
-            if author and genre:
-                books.append(Book(
-                    id=row['id'],
-                    title=row['title'],
-                    author=author,
-                    genre=genre,
-                    is_read=bool(row['is_read'])
-                ))
+            books.append(self._map_row_to_book(row))
         return books
+    
+    def _map_row_to_book(self, row) -> Book:
+        author = Author(id=row['author_id'], name=row['author_name'])
+        genre = Genre(id=row['genre_id'], name=row['genre_name'])
+        return Book(
+            id=row['id'],
+            title=row['title'],
+            author=author,
+            genre=genre,
+            is_read=bool(row['is_read'])
+        )
 
 class SQLiteAuthorRepository(IAuthorRepository):
     def __init__(self, db_conn: DBConnectMethods):
